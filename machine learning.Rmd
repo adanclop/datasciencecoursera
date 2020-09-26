@@ -1,0 +1,66 @@
+---
+title: "Predicting human activity"
+author: "Adán López"
+date: "25/9/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = T)
+```
+
+## Summary
+
+I use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, and predict he class (this is, how they performed the barbell lifts). We also established a baseline performance index?? 
+
+## Data
+
+```{r data, cache=TRUE, message=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+               destfile="training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+               destfile="testing.csv")
+training<-read.csv("training.csv"); testing<-read.csv("testing.csv")
+c<-c(7:11,37:49,60:68,84:86,102,113:124,140,151:159)
+train<-as.data.frame(matrix(ncol = length(c), nrow = nrow(training)))
+j<-1 ## Now I change the class to numeric data for both datasets
+for(i in c) {
+      train[,j]<-as.numeric(training[,i]); 
+      testing[,j]<-as.numeric(testing[,i])
+      j<-j+1}
+train$classe<-as.factor(training$classe)
+tclasse<-testing$classe #???
+testing<-testing[,c]
+names(train)[1:53]<-names(testing)
+```
+
+I extracted only the variables of interest, which had relevant information and without missing values. I used the Random forest method for the classification. A problem with this could be the overfitting, which I reduce by cross validation. I preprocessed by principal component analysis, centering and scaling, in order to use less variables and transforming them in the same units.
+
+```{r model}
+library(caret); set.seed(123); library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+fitControl <- trainControl(method = "cv", number = 5,
+                           allowParallel = T, preProcOptions = list(thresh = 0.95))
+fit1<-train(classe~.,train, method="rf",trControl=fitControl,
+            preProcess=c("pca","center","scale"))
+stopCluster(cluster)
+registerDoSEQ()
+V<-predict(fit1,newdata=testing)
+fit1[11][[1]]
+```
+
+In the table above you can see the **estimated error rate**, which should be similar to the out of sample error, since for the **cross validation** I took 5 resamples of the training data. 
+
+```{r plot, echo=FALSE, message=FALSE}
+plot(fit1$finalModel)
+```
+
+At the end, we can see that after 200 trees there is no significant improvement in the error. The **prediction for the 20 cases** in the testing set are: `r V`
+
+## Reference
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. [Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements](http://groupware.les.inf.puc-rio.br/work.jsf?p1=10335). Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+Cited by 2 (Google Scholar)
+
+Read more: [here](http://groupware.les.inf.puc-rio.br/har#ixzz6Z3ln0Rkf)
